@@ -44,7 +44,8 @@
 //! mapping your inner fields to a tuple or `GTup`, and call the right `Vertex` method on that
 //! tuple.
 
-use std::vec::Vec;
+#[cfg(feature = "std")] use std::vec::Vec;
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
 
 use gtup::GTup;
 
@@ -120,8 +121,8 @@ macro_rules! impl_base {
         vec![VertexComponentFormat {
           comp_type: Type::$comp_type,
           dim: Dim::$dim,
-          unit_size: ::std::mem::size_of::<$q>(),
-          align: ::std::mem::align_of::<$q>()
+          unit_size: $crate::vertex::size_of::<$q>(),
+          align: $crate::vertex::align_of::<$q>()
         }]
       }
     }
@@ -208,3 +209,31 @@ impl_vertex_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
 impl_vertex_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_vertex_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_vertex_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+
+/// A local version of size_of that depends on the state of the std feature.
+#[inline(always)]
+pub fn size_of<T>() -> usize {
+  #[cfg(feature = "std")]
+  {
+    ::std::mem::size_of::<T>()
+  }
+
+  #[cfg(not(feature = "std"))]
+  {
+    ::core::mem::size_of::<T>()
+  }
+}
+
+/// A local version of align_of that depends on the state of the std feature.
+#[inline(always)]
+pub fn align_of<T>() -> usize {
+  #[cfg(feature = "std")]
+  {
+    ::std::mem::align_of::<T>()
+  }
+
+  #[cfg(not(feature = "std"))]
+  {
+    ::core::mem::align_of::<T>()
+  }
+}

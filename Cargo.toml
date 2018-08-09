@@ -17,5 +17,10 @@ is-it-maintained-issue-resolution = { repository = "phaazon/luminance-rs" }
 is-it-maintained-open-issues = { repository = "phaazon/luminance-rs" }
 maintenance = { status = "actively-developed" }
 
-[dependencies]
-gl = "0.10"
+[features]
+default = ["std"]
+std = ["gl"]
+
+[dependencies.gl]
+version = "0.10"
+optional = true

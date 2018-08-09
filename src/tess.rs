@@ -32,18 +32,23 @@
 //! In order to render a `Tess`, you have to use a `TessSlice` object. You’ll be able to use that
 //! object in *pipelines*. See the `pipeline` module for further details.
 
-use gl;
-use gl::types::*;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
-use std::mem::size_of;
-use std::ops::{Range, RangeFull, RangeFrom, RangeTo};
-use std::os::raw::c_void;
-use std::ptr;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::mem::size_of;
+#[cfg(feature = "std")] use std::ops::{Range, RangeFull, RangeFrom, RangeTo};
+#[cfg(feature = "std")] use std::os::raw::c_void;
+#[cfg(feature = "std")] use std::ptr;
+
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::fmt;
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
+#[cfg(not(feature = "std"))] use core::mem::size_of;
+#[cfg(not(feature = "std"))] use core::ops::{Range, RangeFull, RangeFrom, RangeTo};
+#[cfg(not(feature = "std"))] use core::ptr;
 
 use buffer::{Buffer, BufferError, BufferSlice, BufferSliceMut, RawBuffer};
 use context::GraphicsContext;
+use metagl::*;
 use vertex::{Dim, Type, Vertex, VertexComponentFormat};
 
 /// Vertices can be connected via several modes.
@@ -80,15 +85,6 @@ impl fmt::Display for TessMapError {
       TessMapError::ForbiddenAttributelessMapping => {
         f.write_str("cannot map an attributeless buffer")
       }
-    }
-  }
-}
-
-impl Error for TessMapError {
-  fn cause(&self) -> Option<&Error> {
-    match *self {
-      TessMapError::VertexBufferMapFailed(ref e) => Some(e),
-      _ => None
     }
   }
 }

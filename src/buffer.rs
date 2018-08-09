@@ -62,23 +62,31 @@
 //! `UniformBlock`. Keep in mind alignment must be respected and is a bit peculiar. TODO: explain
 //! std140 here.
 
-use gl;
-use gl::types::*;
-use std::cell::RefCell;
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
-use std::mem;
-use std::ops::{Deref, DerefMut};
-use std::os::raw::c_void;
-use std::ptr;
-use std::rc::Rc;
-use std::slice;
-use std::vec::Vec;
+#[cfg(feature = "std")] use std::cell::RefCell;
+#[cfg(feature = "std")] use std::cmp::Ordering;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::mem;
+#[cfg(feature = "std")] use std::ops::{Deref, DerefMut};
+#[cfg(feature = "std")] use std::os::raw::c_void;
+#[cfg(feature = "std")] use std::ptr;
+#[cfg(feature = "std")] use std::rc::Rc;
+#[cfg(feature = "std")] use std::slice;
+
+#[cfg(not(feature = "std"))] use alloc::rc::Rc;
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::cell::RefCell;
+#[cfg(not(feature = "std"))] use core::cmp::Ordering;
+#[cfg(not(feature = "std"))] use core::fmt;
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
+#[cfg(not(feature = "std"))] use core::mem;
+#[cfg(not(feature = "std"))] use core::ops::{Deref, DerefMut};
+#[cfg(not(feature = "std"))] use core::ptr;
+#[cfg(not(feature = "std"))] use core::slice;
 
 use context::GraphicsContext;
 use linear::{M22, M33, M44};
+use metagl::*;
 use state::GraphicsState;
 
 /// Buffer errors.
@@ -99,8 +107,6 @@ pub enum BufferError {
   /// Mapping the buffer failed.
   MapFailed
 }
-
-impl Error for BufferError {}
 
 impl fmt::Display for BufferError {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {

@@ -1,9 +1,14 @@
-use gl;
-use gl::types::*;
-use std::error::Error;
-use std::ffi::CString;
-use std::fmt;
-use std::ptr::{null, null_mut};
+#[cfg(feature = "std")] use std::ffi::CString;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::ptr::{null, null_mut};
+
+#[cfg(not(feature = "std"))] use alloc::prelude::ToOwned;
+#[cfg(not(feature = "std"))] use alloc::string::String;
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::fmt;
+#[cfg(not(feature = "std"))] use core::ptr::{null, null_mut};
+
+use metagl::*;
 
 /// A shader stage type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,14 +43,13 @@ impl Stage {
   /// Create a new shader stage.
   pub fn new(ty: Type, src: &str) -> Result<Self, StageError> {
     unsafe {
-      let src = CString::new(glsl_pragma_src(src).as_bytes()).unwrap();
       let handle = gl::CreateShader(opengl_shader_type(ty));
 
       if handle == 0 {
-        return Err(StageError::CompilationFailed(ty, String::from("unable to create shader stage")));
+        return Err(StageError::CompilationFailed(ty, "unable to create shader stage".to_owned()));
       }
 
-      gl::ShaderSource(handle, 1, [src.as_ptr()].as_ptr(), null());
+      Self::source(handle, src);
       gl::CompileShader(handle);
 
       let mut compiled: GLint = gl::FALSE as GLint;
@@ -68,6 +72,26 @@ impl Stage {
         log.set_len(log_len as usize);
 
         Err(StageError::CompilationFailed(ty, String::from_utf8(log).unwrap()))
+      }
+    }
+  }
+
+  // Source a shader stage with the given shader stage handle and the source.
+  #[inline(always)]
+  fn source(handle: GLuint, src: &str) {
+    #[cfg(feature = "std")]
+    {
+      let c_src = CString::new(glsl_pragma_src(src).as_bytes()).unwrap();
+      unsafe { gl::ShaderSource(handle, 1, [c_src.as_ptr()].as_ptr(), null()) };
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+      unsafe {
+        // we ignore errors since we’ll fail when compiling
+        let _ = with_cstring(&glsl_pragma_src(src), |c_src| {
+          gl::ShaderSource(handle, 1, [c_src].as_ptr(), null());
+        });
       }
     }
   }
@@ -106,8 +130,6 @@ impl fmt::Display for StageError {
     }
   }
 }
-
-impl Error for StageError {}
 
 fn glsl_pragma_src(src: &str) -> String {
   let mut pragma = String::from(GLSL_PRAGMA);

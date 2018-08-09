@@ -68,19 +68,27 @@
 //! The function `Texel::get_raw_texels` must be used to retreive texels out of a texture. This
 //! function allocates memory, so be careful when using it.
 
-use gl;
-use gl::types::*;
-use std::cell::RefCell;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
-use std::mem;
-use std::os::raw::c_void;
-use std::ops::{Deref, DerefMut};
-use std::ptr;
-use std::rc::Rc;
+#[cfg(feature = "std")] use std::cell::RefCell;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::mem;
+#[cfg(feature = "std")] use std::os::raw::c_void;
+#[cfg(feature = "std")] use std::ops::{Deref, DerefMut};
+#[cfg(feature = "std")] use std::ptr;
+#[cfg(feature = "std")] use std::rc::Rc;
+
+#[cfg(not(feature = "std"))] use alloc::rc::Rc;
+#[cfg(not(feature = "std"))] use alloc::string::String;
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::cell::RefCell;
+#[cfg(not(feature = "std"))] use core::fmt::{self, Write};
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
+#[cfg(not(feature = "std"))] use core::mem;
+#[cfg(not(feature = "std"))] use core::ops::{Deref, DerefMut};
+#[cfg(not(feature = "std"))] use core::ptr;
 
 use context::GraphicsContext;
+use metagl::*;
 use pixel::{Pixel, PixelFormat, opengl_pixel_format, pixel_components};
 use state::GraphicsState;
 
@@ -615,26 +623,55 @@ where L: Layerable,
         (Layering::Flat, Dim::Dim1) => {
           create_texture_1d_storage(format, iformat, encoding, D::width(size), mipmaps);
           Ok(())
-        },
+        }
+
         // 2D texture
         (Layering::Flat, Dim::Dim2) => {
           create_texture_2d_storage(format, iformat, encoding, D::width(size), D::height(size), mipmaps);
           Ok(())
-        },
+        }
+
         // 3D texture
         (Layering::Flat, Dim::Dim3) => {
           create_texture_3d_storage(format, iformat, encoding, D::width(size), D::height(size), D::depth(size), mipmaps);
           Ok(())
-        },
+        }
+
         // cubemap
         (Layering::Flat, Dim::Cubemap) => {
           create_cubemap_storage(format, iformat, encoding, D::width(size), mipmaps);
           Ok(())
-        },
-        _ => Err(TextureError::TextureStorageCreationFailed(format!("unsupported texture OpenGL pixel format: {:?}", glf)))
+        }
+
+        _ => {
+          #[cfg(feature = "std")]
+          {
+            Err(TextureError::TextureStorageCreationFailed(format!("unsupported texture OpenGL pixel format: {:?}", glf)))
+          }
+
+          #[cfg(not(feature = "std"))]
+          {
+            let mut reason = String::new();
+            let _ = write!(&mut reason, "unsupported texture OpenGL pixel format: {:?}", glf);
+            Err(TextureError::TextureStorageCreationFailed(reason))
+          }
+        }
       }
-    },
-    None => Err(TextureError::TextureStorageCreationFailed(format!("unsupported texture pixel format: {:?}", pf)))
+    }
+
+    None => {
+      #[cfg(feature = "std")]
+      {
+        Err(TextureError::TextureStorageCreationFailed(format!("unsupported texture pixel format: {:?}", pf)))
+      }
+
+      #[cfg(not(feature = "std"))]
+      {
+        let mut reason = String::new();
+        let _ = write!(&mut reason, "unsupported texture pixel format: {:?}", pf);
+        Err(TextureError::TextureStorageCreationFailed(reason))
+      }
+    }
   }
 }
 
@@ -810,6 +847,3 @@ impl fmt::Display for TextureError {
     }
   }
 }
-
-impl Error for TextureError {}
-

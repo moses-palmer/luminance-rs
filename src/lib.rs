@@ -107,7 +107,11 @@
 //!     implement your own `new` function for your backend type because of the restriction of having
 //!     only one context per thread in `luminance`.
 
-extern crate gl;
+#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), feature(alloc))]
+
+#[cfg(not(feature = "std"))] #[macro_use(vec)] extern crate alloc;
+#[cfg(feature = "std")] extern crate gl;
 
 pub mod blending;
 pub mod buffer;
@@ -117,6 +121,7 @@ pub mod face_culling;
 #[macro_use] pub mod framebuffer;
 #[macro_use] pub mod gtup;
 pub mod linear;
+mod metagl;
 pub mod pipeline;
 pub mod pixel;
 pub mod render_state;

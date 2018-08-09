@@ -1,18 +1,22 @@
 //! Graphics state.
 
-use gl;
-use gl::types::*;
-use std::cell::RefCell;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::cell::RefCell;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::fmt;
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
 
 use blending::{BlendingState, Equation, Factor};
 use depth_test::DepthTest;
 use face_culling::{FaceCullingMode, FaceCullingOrder, FaceCullingState};
+use metagl::*;
 
 // TLS synchronization barrier for `GraphicsState`.
-thread_local!(static TLS_ACQUIRE_GFX_STATE: RefCell<Option<()>> = RefCell::new(Some(())));
+//
+// Note: disable on no_std.
+#[cfg(feature = "std")] thread_local!(static TLS_ACQUIRE_GFX_STATE: RefCell<Option<()>> = RefCell::new(Some(())));
 
 /// The graphics state.
 ///
@@ -59,20 +63,30 @@ pub struct GraphicsState {
 impl GraphicsState {
   /// Create a new `GraphicsState`.
   /// 
-  /// Keep in mind you can create only one per thread.
+  /// > Note: keep in mind you can create only one per thread. However, if you’re building without
+  /// > standard library, this function will always return successfully. You have to take extra care
+  /// > in this case.
   pub fn new() -> Result<Self, StateQueryError> {
-    TLS_ACQUIRE_GFX_STATE.with(|rc| {
-      let mut inner = rc.borrow_mut();
+    #[cfg(feature = "std")]
+    {
+      TLS_ACQUIRE_GFX_STATE.with(|rc| {
+        let mut inner = rc.borrow_mut();
 
-      match *inner {
-        Some(_) => {
-          inner.take();
-          Self::get_from_context()
+        match *inner {
+          Some(_) => {
+            inner.take();
+            Self::get_from_context()
+          }
+
+          None => Err(StateQueryError::UnavailableGraphicsState)
         }
+      })
+    }
 
-        None => Err(StateQueryError::UnavailableGraphicsState)
-      }
-    })
+    #[cfg(not(feature = "std"))]
+    {
+      Self::get_from_context()
+    }
   }
 
   /// Get a `GraphicsContext` from the current OpenGL context.
@@ -322,8 +336,6 @@ impl fmt::Display for StateQueryError {
     }
   }
 }
-
-impl Error for StateQueryError {}
 
 unsafe fn get_ctx_blending_state() -> Result<BlendingState, StateQueryError> {
   let state = gl::IsEnabled(gl::BLEND);

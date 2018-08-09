@@ -21,8 +21,11 @@
 //! dynamic branches in the implementation and reduce the number of required safety
 //! checks – enforced at compile time instead.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+#[cfg(feature = "std")] use std::cell::RefCell;
+#[cfg(feature = "std")] use std::rc::Rc;
+
+#[cfg(not(feature = "std"))] use alloc::rc::Rc;
+#[cfg(not(feature = "std"))] use core::cell::RefCell;
 
 use pipeline::Builder;
 use state::GraphicsState;

@@ -28,14 +28,16 @@
 //!
 //! Color buffers are abstracted by `ColorSlot` and the depth buffer by `DepthSlot`.
 
-use gl;
-use gl::types::*;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::fmt;
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
 
 use context::GraphicsContext;
 use gtup::GTup;
+use metagl::*;
 use pixel::{ColorPixel, DepthPixel, PixelFormat, RenderablePixel};
 use texture::{Dim2, Dimensionable, Flat, Layerable, RawTexture, Texture, TextureError,
               create_texture, opengl_target};
@@ -58,15 +60,6 @@ impl fmt::Display for FramebufferError {
         write!(f, "incomplete framebuffer: {}", e)
       }
     }
-  }
-}
-
-impl Error for FramebufferError {
-  fn cause(&self) -> Option<&Error> {
-    Some(match *self {
-      FramebufferError::TextureError(ref e) => e,
-      FramebufferError::Incomplete(ref e) => e
-    })
   }
 }
 
@@ -97,8 +90,6 @@ impl fmt::Display for IncompleteReason {
     }
   }
 }
-
-impl Error for IncompleteReason {}
 
 /// Framebuffer with static layering, dimension, access and slots formats.
 ///

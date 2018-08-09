@@ -28,16 +28,22 @@
 //!
 //! You can create a `Program` with its `new` associated function.
 
-use gl;
-use gl::types::*;
-use std::error::Error;
-use std::ffi::CString;
-use std::fmt;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::ptr::null_mut;
+#[cfg(feature = "std")] use std::ffi::CString;
+#[cfg(feature = "std")] use std::fmt;
+#[cfg(feature = "std")] use std::marker::PhantomData;
+#[cfg(feature = "std")] use std::ops::Deref;
+#[cfg(feature = "std")] use std::ptr::null_mut;
+
+#[cfg(not(feature = "std"))] use alloc::prelude::ToOwned;
+#[cfg(not(feature = "std"))] use alloc::string::String;
+#[cfg(not(feature = "std"))] use alloc::vec::Vec;
+#[cfg(not(feature = "std"))] use core::fmt::{self, Write};
+#[cfg(not(feature = "std"))] use core::marker::PhantomData;
+#[cfg(not(feature = "std"))] use core::ops::Deref;
+#[cfg(not(feature = "std"))] use core::ptr::null_mut;
 
 use linear::{M22, M33, M44};
+use metagl::*;
 use shader::stage::{self, Stage, StageError};
 use vertex::Vertex;
 
@@ -345,8 +351,22 @@ impl<'a> UniformBuilder<'a> {
   }
 
   fn ask_uniform<T>(&self, name: &str) -> Result<Uniform<T>, UniformWarning> where T: Uniformable {
-    let c_name = CString::new(name.as_bytes()).unwrap();
-    let location = unsafe { gl::GetUniformLocation(self.raw.handle, c_name.as_ptr() as *const GLchar) };
+    let location = {
+      #[cfg(feature = "std")]
+      {
+        let c_name = CString::new(name.as_bytes()).unwrap();
+        unsafe { gl::GetUniformLocation(self.raw.handle, c_name.as_ptr() as *const GLchar) }
+      }
+
+      #[cfg(not(feature = "std"))]
+      {
+        unsafe {
+          with_cstring(name, |c_name| {
+            gl::GetUniformLocation(self.raw.handle, c_name)
+          }).unwrap_or(-1)
+        }
+      }
+    };
 
     if location < 0 {
       Err(UniformWarning::Inactive(name.to_owned()))
@@ -356,8 +376,22 @@ impl<'a> UniformBuilder<'a> {
   }
 
   fn ask_uniform_block<T>(&self, name: &str) -> Result<Uniform<T>, UniformWarning> where T: Uniformable {
-    let c_name = CString::new(name.as_bytes()).unwrap();
-    let location = unsafe { gl::GetUniformBlockIndex(self.raw.handle, c_name.as_ptr() as *const GLchar) };
+    let location = {
+      #[cfg(feature = "std")]
+      {
+        let c_name = CString::new(name.as_bytes()).unwrap();
+        unsafe { gl::GetUniformBlockIndex(self.raw.handle, c_name.as_ptr() as *const GLchar) }
+      }
+
+      #[cfg(not(feature = "std"))]
+      {
+        unsafe {
+          with_cstring(name, |c_name| {
+            gl::GetUniformBlockIndex(self.raw.handle, c_name)
+          }).unwrap_or(gl::INVALID_INDEX)
+        }
+      }
+    };
 
     if location == gl::INVALID_INDEX {
       Err(UniformWarning::Inactive(name.to_owned()))
@@ -404,16 +438,6 @@ impl fmt::Display for ProgramError {
   }
 }
 
-impl Error for ProgramError {
-  fn cause(&self) -> Option<&Error> {
-    match *self {
-      ProgramError::StageError(ref e) => Some(e),
-      ProgramError::UniformWarning(ref e) => Some(e),
-      _ => None
-    }
-  }
-}
-
 /// Warnings related to uniform issues.
 #[derive(Clone, Debug)]
 pub enum UniformWarning {
@@ -439,8 +463,6 @@ impl fmt::Display for UniformWarning {
     }
   }
 }
-
-impl Error for UniformWarning {}
 
 /// A shader uniform. `Uniform<T>` doesn’t hold any value. It’s more like a mapping between the
 /// host code and the shader the uniform was retrieved from.
@@ -850,19 +872,45 @@ unsafe impl<'a> Uniformable for &'a [[bool; 4]] {
 fn uniform_type_match(program: GLuint, name: &str, ty: Type) -> Result<(), String> {
   let mut size: GLint = 0;
   let mut typ: GLuint = 0;
-  let c_name = CString::new(name.as_bytes()).unwrap();
 
   unsafe {
     // get the max length of the returned names
     let mut max_len = 0;
     gl::GetProgramiv(program, gl::ACTIVE_UNIFORM_MAX_LENGTH, &mut max_len);
 
+
     // get the index of the uniform
     let mut index = 0;
-    let mut name_ = Vec::<i8>::with_capacity(max_len as usize);
-    gl::GetUniformIndices(program, 1, [c_name.as_ptr() as *const i8].as_ptr(), &mut index);
+
+    #[cfg(feature = "std")]
+    {
+      let c_name = CString::new(name.as_bytes()).unwrap();
+      gl::GetUniformIndices(program, 1, [c_name.as_ptr() as *const i8].as_ptr(), &mut index);
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+      let r = with_cstring(name, |c_name| {
+        gl::GetUniformIndices(program, 1, [c_name].as_ptr(), &mut index);
+      });
+
+      if let Err(_) = r {
+        #[cfg(feature = "std")]
+        {
+          return Err(format!("unable to find the index of {}", name));
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+          let mut reason = String::new();
+          let _ = write!(&mut reason, "unable to find the index of {}", name);
+          return Err(reason);
+        }
+      }
+    }
 
     // get its size and type
+    let mut name_ = Vec::<i8>::with_capacity(max_len as usize);
     gl::GetActiveUniform(program, index, max_len, null_mut(), &mut size, &mut typ, name_.as_mut_ptr());
   }
 
@@ -873,7 +921,19 @@ fn uniform_type_match(program: GLuint, name: &str, ty: Type) -> Result<(), Strin
   }
 
   // helper function for error reporting
-  let type_mismatch = |t| Err(format!("requested {} doesn’t match", t));
+  let type_mismatch = |t| {
+    #[cfg(feature = "std")]
+    {
+      Err(format!("requested {} doesn’t match", t))
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+      let mut reason = String::new();
+      let _ = write!(&mut reason, "requested {} doesn’t match", t);
+      Err(reason)
+    }
+  };
 
   match ty {
     // scalars
